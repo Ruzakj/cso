@@ -70,8 +70,15 @@ public class MainActivity extends Activity {
     }
 
     private void pickIso() {
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/octet-stream")
-                .addCategory(Intent.CATEGORY_OPENABLE);
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                        "application/octet-stream",
+                        "application/x-iso9660-image",
+                        "application/x-cd-image",
+                        "application/x-iso-image"
+                });
         startActivityForResult(i, PICK_ISO);
     }
     private void createOutput() {
@@ -83,7 +90,16 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int req,int result,Intent data) {
         super.onActivityResult(req,result,data); if(result!=RESULT_OK || data==null || data.getData()==null)return;
         Uri uri=data.getData();
-        if(req==PICK_ISO){ inputUri=uri; inputName=nameOf(uri); fileText.setText(inputName); startButton.setEnabled(true); statusText.setText("ISO siap dikompres"); }
+        if(req==PICK_ISO){
+            String selectedName=nameOf(uri);
+            if(!selectedName.toLowerCase(Locale.ROOT).endsWith(".iso")){
+                statusText.setText("File harus berformat .iso");
+                statsText.setText("Pilih image game PSP dengan ekstensi ISO.");
+                return;
+            }
+            inputUri=uri; inputName=selectedName; fileText.setText(inputName);
+            startButton.setEnabled(true); statusText.setText("ISO siap dikompres");
+        }
         else if(req==CREATE_CSO){ outputUri=uri; runCompression(); }
     }
     private void runCompression() {
