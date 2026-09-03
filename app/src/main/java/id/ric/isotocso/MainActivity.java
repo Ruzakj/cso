@@ -12,10 +12,18 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
 import java.text.DecimalFormat;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +39,7 @@ public class MainActivity extends Activity {
     private Button chooseButton, startButton, cancelButton;
     private ProgressBar progress;
     private SeekBar levelBar;
+    private RadioButton csoOption, chdOption;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -42,17 +51,27 @@ public class MainActivity extends Activity {
         int pad = dp(22);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, dp(30), pad, pad); root.setBackgroundColor(Color.rgb(245,245,250));
-        TextView title = text("ISO → CSO", 30, true); root.addView(title);
+        TextView title = text("ISO → CSO / CHD", 30, true); root.addView(title);
         TextView sub = text("Kompres game PSP langsung di perangkat · full offline", 14, false);
         sub.setTextColor(Color.DKGRAY); root.addView(sub, margins(dp(0),dp(6),0,dp(28)));
 
         fileText = text("Belum ada ISO dipilih", 16, true); root.addView(fileText, margins(0,0,0,dp(12)));
         chooseButton = button("Pilih file ISO"); chooseButton.setOnClickListener(v -> pickIso()); root.addView(chooseButton);
 
-        levelText = text("Level kompresi: 6 · Seimbang", 16, true); root.addView(levelText, margins(0,dp(30),0,dp(4)));
+        TextView formatLabel = text("Format hasil", 16, true); root.addView(formatLabel, margins(0,dp(28),0,dp(6)));
+        RadioGroup formats = new RadioGroup(this); formats.setOrientation(RadioGroup.HORIZONTAL);
+        csoOption = new RadioButton(this); csoOption.setText("CSO · kompatibel luas"); csoOption.setChecked(true);
+        chdOption = new RadioButton(this); chdOption.setText("CHD · lebih kecil");
+        formats.addView(csoOption); formats.addView(chdOption); root.addView(formats);
+        formats.setOnCheckedChangeListener((group, id) -> {
+            boolean cso=csoOption.isChecked(); levelBar.setVisibility(cso?View.VISIBLE:View.GONE);
+            levelText.setVisibility(cso?View.VISIBLE:View.GONE);
+        });
+
+        levelText = text("Level kompresi CSO: 6 · Seimbang", 16, true); root.addView(levelText, margins(0,dp(24),0,dp(4)));
         levelBar = new SeekBar(this); levelBar.setMax(8); levelBar.setProgress(5);
         levelBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar b,int p,boolean u){ int l=p+1; levelText.setText("Level kompresi: "+l+" · "+(l<=3?"Cepat":l<=6?"Seimbang":"Maksimal")); }
+            public void onProgressChanged(SeekBar b,int p,boolean u){ int l=p+1; levelText.setText("Level kompresi CSO: "+l+" · "+(l<=3?"Cepat":l<=6?"Seimbang":"Maksimal")); }
             public void onStartTrackingTouch(SeekBar b){} public void onStopTrackingTouch(SeekBar b){}
         }); root.addView(levelBar);
 
@@ -83,8 +102,9 @@ public class MainActivity extends Activity {
     }
     private void createOutput() {
         String base = inputName.toLowerCase(Locale.ROOT).endsWith(".iso") ? inputName.substring(0,inputName.length()-4) : inputName;
+        String extension = chdOption.isChecked() ? ".chd" : ".cso";
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream")
-                .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, base + ".cso");
+                .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, base + extension);
         startActivityForResult(i, CREATE_CSO);
     }
     @Override protected void onActivityResult(int req,int result,Intent data) {
@@ -104,24 +124,58 @@ public class MainActivity extends Activity {
     }
     private void runCompression() {
         setBusy(true); cancelled.set(false); progress.setProgress(0); long uiStart=System.currentTimeMillis();
+        final boolean makeChd=chdOption.isChecked(); final int csoLevel=levelBar.getProgress()+1;
         worker.execute(() -> {
             try {
-                CsoCompressor.Result r=CsoCompressor.compress(getContentResolver(),inputUri,outputUri,levelBar.getProgress()+1,cancelled,
+                long inputBytes, outputBytes;
+                if(makeChd){
+                    long[] sizes=compressChd(); inputBytes=sizes[0]; outputBytes=sizes[1];
+                } else {
+                CsoCompressor.Result r=CsoCompressor.compress(getContentResolver(),inputUri,outputUri,csoLevel,cancelled,
                     (done,total,written,started)->runOnUiThread(()->{
                         progress.setProgress((int)(done*1000/total)); double sec=Math.max(.001,(System.currentTimeMillis()-started)/1000d);
                         statusText.setText("Mengompres… "+(done*100/total)+"%");
                         statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk\nOutput sementara: "+size(written));
-                    }));
+                    })); inputBytes=r.inputBytes(); outputBytes=r.outputBytes();
+                }
                 runOnUiThread(()->{ setBusy(false); progress.setProgress(1000); statusText.setText("Selesai & tervalidasi");
-                    long saved=r.inputBytes()-r.outputBytes(); double ratio=r.outputBytes()*100d/r.inputBytes();
-                    statsText.setText("Hasil "+size(r.outputBytes())+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
+                    long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;
+                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
             } catch(Exception e) {
                 if(outputUri!=null) try{ getContentResolver().delete(outputUri,null,null); }catch(Exception ignored){}
                 runOnUiThread(()->{setBusy(false);progress.setProgress(0);statusText.setText(e instanceof CsoCompressor.CancelledException?"Dibatalkan":"Gagal");statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());});
             }
         });
     }
-    private void setBusy(boolean busy){ chooseButton.setEnabled(!busy);startButton.setEnabled(!busy&&inputUri!=null);levelBar.setEnabled(!busy);cancelButton.setVisibility(busy?View.VISIBLE:View.GONE);cancelButton.setEnabled(busy); if(busy)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); }
+    private long[] compressChd() throws IOException {
+        File cache=getExternalCacheDir()!=null?getExternalCacheDir():getCacheDir();
+        File input=new File(cache,"chd-input.iso"), output=new File(cache,"chd-output.chd");
+        try {
+            long total=uriSize(inputUri); copyUriToFile(inputUri,input,total);
+            if(cancelled.get()) throw new CsoCompressor.CancelledException();
+            runOnUiThread(()->{progress.setIndeterminate(true);statusText.setText("Membuat CHD…");statsText.setText("Engine CHD sedang mengompres. Proses ini dapat memakan waktu.");});
+            new com.chdman.utils.Chdman().createDvd(input,output);
+            if(cancelled.get()) throw new CsoCompressor.CancelledException();
+            runOnUiThread(()->{progress.setIndeterminate(false);statusText.setText("Menyimpan CHD…");});
+            try(InputStream in=new FileInputStream(output);OutputStream out=getContentResolver().openOutputStream(outputUri,"wt")){
+                if(out==null)throw new IOException("Lokasi output tidak dapat ditulis"); copy(in,out,output.length(),"Menyimpan CHD…");
+            }
+            return new long[]{input.length(),output.length()};
+        } finally { input.delete(); output.delete(); runOnUiThread(()->progress.setIndeterminate(false)); }
+    }
+    private void copyUriToFile(Uri uri,File target,long total)throws IOException{
+        try(InputStream in=getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(target)){
+            if(in==null)throw new IOException("ISO tidak dapat dibuka"); copy(in,out,total,"Menyiapkan ISO…");
+        }
+    }
+    private void copy(InputStream in,OutputStream out,long total,String label)throws IOException{
+        byte[] buffer=new byte[1024*1024];long done=0;int read;
+        while((read=in.read(buffer))!=-1){if(cancelled.get())throw new CsoCompressor.CancelledException();if(read==0)continue;out.write(buffer,0,read);done+=read;long value=done;
+            runOnUiThread(()->{progress.setProgress(total>0?(int)(value*1000/total):0);statusText.setText(label+" "+(total>0?value*100/total:0)+"%");statsText.setText(size(value)+(total>0?" / "+size(total):""));});}
+        out.flush();
+    }
+    private long uriSize(Uri uri){try(android.os.ParcelFileDescriptor p=getContentResolver().openFileDescriptor(uri,"r")){return p==null?-1:p.getStatSize();}catch(Exception e){return -1;}}
+    private void setBusy(boolean busy){ chooseButton.setEnabled(!busy);startButton.setEnabled(!busy&&inputUri!=null);levelBar.setEnabled(!busy);csoOption.setEnabled(!busy);chdOption.setEnabled(!busy);cancelButton.setVisibility(busy?View.VISIBLE:View.GONE);cancelButton.setEnabled(busy); if(busy)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); }
     private String nameOf(Uri uri){ try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "game.iso"; }
     private static String size(long n){ if(n<1024)return n+" B"; double v=n;String[]u={"KB","MB","GB","TB"};int i=-1;do{v/=1024;i++;}while(v>=1024&&i<u.length-1);return String.format(Locale.getDefault(),"%.1f %s",v,u[i]); }
     private TextView text(String s,int sp,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(sp);v.setTextColor(Color.rgb(24,24,32));if(bold)v.setTypeface(null,1);return v;}
