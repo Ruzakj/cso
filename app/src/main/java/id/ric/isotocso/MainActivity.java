@@ -57,6 +57,9 @@ public class MainActivity extends Activity {
 
         fileText = text("Belum ada ISO dipilih", 16, true); root.addView(fileText, margins(0,0,0,dp(12)));
         chooseButton = button("Pilih file ISO"); chooseButton.setOnClickListener(v -> pickIso()); root.addView(chooseButton);
+        Button cutsceneButton=button("Kelola cutscene PS2");
+        cutsceneButton.setOnClickListener(v->startActivity(new Intent(this,CutsceneActivity.class)));
+        root.addView(cutsceneButton,margins(0,dp(8),0,0));
 
         TextView formatLabel = text("Format hasil", 16, true); root.addView(formatLabel, margins(0,dp(28),0,dp(6)));
         RadioGroup formats = new RadioGroup(this); formats.setOrientation(RadioGroup.HORIZONTAL);
