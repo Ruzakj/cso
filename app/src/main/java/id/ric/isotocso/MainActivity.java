@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
     private ProgressBar progress;
     private SeekBar levelBar;
     private RadioButton csoOption, chdOption;
+    private boolean outputAsChd;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -63,12 +64,14 @@ public class MainActivity extends Activity {
 
         TextView formatLabel = text("Format hasil", 16, true); root.addView(formatLabel, margins(0,dp(28),0,dp(6)));
         RadioGroup formats = new RadioGroup(this); formats.setOrientation(RadioGroup.HORIZONTAL);
-        csoOption = new RadioButton(this); csoOption.setText("CSO · kompatibel luas"); csoOption.setChecked(true);
-        chdOption = new RadioButton(this); chdOption.setText("CHD · lebih kecil");
-        formats.addView(csoOption); formats.addView(chdOption); root.addView(formats);
+        csoOption = new RadioButton(this); csoOption.setId(View.generateViewId()); csoOption.setText("CSO · kompatibel luas");
+        chdOption = new RadioButton(this); chdOption.setId(View.generateViewId()); chdOption.setText("CHD · lebih kecil");
+        formats.addView(csoOption); formats.addView(chdOption); formats.check(csoOption.getId()); root.addView(formats);
         formats.setOnCheckedChangeListener((group, id) -> {
-            boolean cso=csoOption.isChecked(); levelBar.setVisibility(cso?View.VISIBLE:View.GONE);
+            boolean cso=id==csoOption.getId();
+            levelBar.setVisibility(cso?View.VISIBLE:View.GONE);
             levelText.setVisibility(cso?View.VISIBLE:View.GONE);
+            startButton.setText(cso?"Pilih lokasi CSO & mulai":"Pilih lokasi CHD & mulai");
         });
 
         levelText = text("Level kompresi CSO: 6 · Seimbang", 16, true); root.addView(levelText, margins(0,dp(24),0,dp(4)));
@@ -78,7 +81,7 @@ public class MainActivity extends Activity {
             public void onStartTrackingTouch(SeekBar b){} public void onStopTrackingTouch(SeekBar b){}
         }); root.addView(levelBar);
 
-        startButton = button("Pilih lokasi hasil & mulai"); startButton.setEnabled(false);
+        startButton = button("Pilih lokasi CSO & mulai"); startButton.setEnabled(false);
         startButton.setOnClickListener(v -> createOutput()); root.addView(startButton, margins(0,dp(22),0,0));
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(1000);
         root.addView(progress, margins(0,dp(24),0,dp(12)));
@@ -105,7 +108,8 @@ public class MainActivity extends Activity {
     }
     private void createOutput() {
         String base = inputName.toLowerCase(Locale.ROOT).endsWith(".iso") ? inputName.substring(0,inputName.length()-4) : inputName;
-        String extension = chdOption.isChecked() ? ".chd" : ".cso";
+        outputAsChd = formatsChdSelected();
+        String extension = outputAsChd ? ".chd" : ".cso";
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream")
                 .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, base + extension);
         startActivityForResult(i, CREATE_CSO);
@@ -127,7 +131,7 @@ public class MainActivity extends Activity {
     }
     private void runCompression() {
         setBusy(true); cancelled.set(false); progress.setProgress(0); long uiStart=System.currentTimeMillis();
-        final boolean makeChd=chdOption.isChecked(); final int csoLevel=levelBar.getProgress()+1;
+        final boolean makeChd=outputAsChd; final int csoLevel=levelBar.getProgress()+1;
         worker.execute(() -> {
             try {
                 long inputBytes, outputBytes;
@@ -177,6 +181,7 @@ public class MainActivity extends Activity {
             runOnUiThread(()->{progress.setProgress(total>0?(int)(value*1000/total):0);statusText.setText(label+" "+(total>0?value*100/total:0)+"%");statsText.setText(size(value)+(total>0?" / "+size(total):""));});}
         out.flush();
     }
+    private boolean formatsChdSelected(){ return chdOption!=null && chdOption.isChecked(); }
     private long uriSize(Uri uri){try(android.os.ParcelFileDescriptor p=getContentResolver().openFileDescriptor(uri,"r")){return p==null?-1:p.getStatSize();}catch(Exception e){return -1;}}
     private void setBusy(boolean busy){ chooseButton.setEnabled(!busy);startButton.setEnabled(!busy&&inputUri!=null);levelBar.setEnabled(!busy);csoOption.setEnabled(!busy);chdOption.setEnabled(!busy);cancelButton.setVisibility(busy?View.VISIBLE:View.GONE);cancelButton.setEnabled(busy); if(busy)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); }
     private String nameOf(Uri uri){ try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "game.iso"; }
