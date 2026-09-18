@@ -143,14 +143,12 @@ public class MainActivity extends Activity {
                     (done,total,written,started)->runOnUiThread(()->{
                         progress.setProgress((int)(done*1000/total)); double sec=Math.max(.001,(System.currentTimeMillis()-started)/1000d);
                         statusText.setText("Mengompres… "+(done*100/total)+"%");
-                        statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk
-Output sementara: "+size(written));
+                        statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk\\nOutput sementara: "+size(written));
                     })); inputBytes=r.inputBytes(); outputBytes=r.outputBytes();
                 }
                 runOnUiThread(()->{ setBusy(false); progress.setProgress(1000); statusText.setText("Selesai & tervalidasi");
                     long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;
-                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO
-Hemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
+                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
             } catch(Exception e) {
                 if(outputUri!=null) try{ getContentResolver().delete(outputUri,null,null); }catch(Exception ignored){}
                 runOnUiThread(()->{setBusy(false);progress.setProgress(0);statusText.setText(e instanceof CsoCompressor.CancelledException?"Dibatalkan":"Gagal");statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());});
