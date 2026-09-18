@@ -76,7 +76,8 @@ public class MainActivity extends Activity {
 
         levelText = text("Level kompresi CSO: 6 · Seimbang", 16, true); root.addView(levelText, margins(0,dp(24),0,dp(4)));
         levelBar = new SeekBar(this); levelBar.setMax(8); levelBar.setProgress(5);
-        levelBar.setVisibility(View.GONE); levelText.setVisibility(View.GONE); startButton = button("Pilih lokasi CHD & mulai");\n        levelBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        levelBar.setVisibility(View.GONE); levelText.setVisibility(View.GONE); startButton = button("Pilih lokasi CHD & mulai");
+        levelBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             public void onProgressChanged(SeekBar b,int p,boolean u){ int l=p+1; levelText.setText("Level kompresi CSO: "+l+" · "+(l<=3?"Cepat":l<=6?"Seimbang":"Maksimal")); }
             public void onStartTrackingTouch(SeekBar b){} public void onStopTrackingTouch(SeekBar b){}
         }); root.addView(levelBar);
@@ -142,12 +143,14 @@ public class MainActivity extends Activity {
                     (done,total,written,started)->runOnUiThread(()->{
                         progress.setProgress((int)(done*1000/total)); double sec=Math.max(.001,(System.currentTimeMillis()-started)/1000d);
                         statusText.setText("Mengompres… "+(done*100/total)+"%");
-                        statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk\nOutput sementara: "+size(written));
+                        statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk
+Output sementara: "+size(written));
                     })); inputBytes=r.inputBytes(); outputBytes=r.outputBytes();
                 }
                 runOnUiThread(()->{ setBusy(false); progress.setProgress(1000); statusText.setText("Selesai & tervalidasi");
                     long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;
-                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
+                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO
+Hemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
             } catch(Exception e) {
                 if(outputUri!=null) try{ getContentResolver().delete(outputUri,null,null); }catch(Exception ignored){}
                 runOnUiThread(()->{setBusy(false);progress.setProgress(0);statusText.setText(e instanceof CsoCompressor.CancelledException?"Dibatalkan":"Gagal");statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());});
