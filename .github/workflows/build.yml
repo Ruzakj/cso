@@ -25,27 +25,15 @@ jobs:
           from pathlib import Path
           p = Path("app/src/main/cpp/mame/src/tools/chdman.cpp")
           s = p.read_text()
-          needle = """    params.insert(std::make_pair(OPTION_INPUT,&in));
-    params.insert(std::make_pair(OPTION_OUTPUT, &out));
-    try {
-        do_create_dvd(params);"""
-          replacement = """    params.insert(std::make_pair(OPTION_INPUT,&in));
-    params.insert(std::make_pair(OPTION_OUTPUT, &out));
-    // PS2 MAX: lossless CHD v5 using the strongest standard codec set.
-    // 1 MiB hunks maximize cross-sector redundancy while remaining valid CHD.
-    std::string compression = "lzma,zlib,huff,flac";
-    std::string hunksize = "1048576";
-    params.insert(std::make_pair(OPTION_COMPRESSION, &compression));
-    params.insert(std::make_pair(OPTION_HUNK_SIZE, &hunksize));
-    try {
-        do_create_dvd(params);"""
+          needle = 'params.insert(std::make_pair(OPTION_OUTPUT, &out));\n    try {\n        do_create_dvd(params);'
+          insert = 'params.insert(std::make_pair(OPTION_OUTPUT, &out));\n    std::string compression = "lzma,zlib,huff,flac";\n    std::string hunksize = "1048576";\n    params.insert(std::make_pair(OPTION_COMPRESSION, &compression));\n    params.insert(std::make_pair(OPTION_HUNK_SIZE, &hunksize));\n    try {\n        do_create_dvd(params);'
           if needle not in s:
               raise SystemExit("createdvd JNI block not found")
-          p.write_text(s.replace(needle, replacement, 1))
+          p.write_text(s.replace(needle, insert, 1))
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: ISO-to-CSO-debug
+          name: CISO-PS2-MAX-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
