@@ -52,8 +52,8 @@ public class MainActivity extends Activity {
         int pad = dp(22);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, dp(30), pad, pad); root.setBackgroundColor(Color.rgb(245,245,250));
-        TextView title = text("ISO → CSO / CHD", 30, true); root.addView(title);
-        TextView sub = text("Kompres game PSP langsung di perangkat · full offline", 14, false);
+        TextView title = text("CISO · PS2 MAX", 30, true); root.addView(title);
+        TextView sub = text("PS2 ISO → CHD lossless maksimum · full offline", 14, false);
         sub.setTextColor(Color.DKGRAY); root.addView(sub, margins(dp(0),dp(6),0,dp(28)));
 
         fileText = text("Belum ada ISO dipilih", 16, true); root.addView(fileText, margins(0,0,0,dp(12)));
@@ -65,8 +65,8 @@ public class MainActivity extends Activity {
         TextView formatLabel = text("Format hasil", 16, true); root.addView(formatLabel, margins(0,dp(28),0,dp(6)));
         RadioGroup formats = new RadioGroup(this); formats.setOrientation(RadioGroup.HORIZONTAL);
         csoOption = new RadioButton(this); csoOption.setId(View.generateViewId()); csoOption.setText("CSO · kompatibel luas");
-        chdOption = new RadioButton(this); chdOption.setId(View.generateViewId()); chdOption.setText("CHD · lebih kecil");
-        formats.addView(csoOption); formats.addView(chdOption); formats.check(csoOption.getId()); root.addView(formats);
+        chdOption = new RadioButton(this); chdOption.setId(View.generateViewId()); chdOption.setText("PS2 MAX · CHD lossless");
+        formats.addView(csoOption); formats.addView(chdOption); formats.check(chdOption.getId()); root.addView(formats);
         formats.setOnCheckedChangeListener((group, id) -> {
             boolean cso=id==csoOption.getId();
             levelBar.setVisibility(cso?View.VISIBLE:View.GONE);
@@ -76,12 +76,12 @@ public class MainActivity extends Activity {
 
         levelText = text("Level kompresi CSO: 6 · Seimbang", 16, true); root.addView(levelText, margins(0,dp(24),0,dp(4)));
         levelBar = new SeekBar(this); levelBar.setMax(8); levelBar.setProgress(5);
-        levelBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        levelBar.setVisibility(View.GONE); levelText.setVisibility(View.GONE); startButton = button("Pilih lokasi CHD & mulai");\n        levelBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             public void onProgressChanged(SeekBar b,int p,boolean u){ int l=p+1; levelText.setText("Level kompresi CSO: "+l+" · "+(l<=3?"Cepat":l<=6?"Seimbang":"Maksimal")); }
             public void onStartTrackingTouch(SeekBar b){} public void onStopTrackingTouch(SeekBar b){}
         }); root.addView(levelBar);
 
-        startButton = button("Pilih lokasi CSO & mulai"); startButton.setEnabled(false);
+        startButton.setEnabled(false);
         startButton.setOnClickListener(v -> createOutput()); root.addView(startButton, margins(0,dp(22),0,0));
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(1000);
         root.addView(progress, margins(0,dp(24),0,dp(12)));
@@ -160,7 +160,7 @@ public class MainActivity extends Activity {
         try {
             long total=uriSize(inputUri); copyUriToFile(inputUri,input,total);
             if(cancelled.get()) throw new CsoCompressor.CancelledException();
-            runOnUiThread(()->{progress.setIndeterminate(true);statusText.setText("Membuat CHD…");statsText.setText("Engine CHD sedang mengompres. Proses ini dapat memakan waktu.");});
+            runOnUiThread(()->{progress.setIndeterminate(true);statusText.setText("Membuat CHD…");statsText.setText("PS2 MAX · LZMA/ZLIB/HUFF/FLAC · hunk 1 MiB · lossless. Proses lebih lama untuk ukuran minimum.");});
             new com.chdman.utils.Chdman().createDvd(input,output);
             if(cancelled.get()) throw new CsoCompressor.CancelledException();
             runOnUiThread(()->{progress.setIndeterminate(false);statusText.setText("Menyimpan CHD…");});
