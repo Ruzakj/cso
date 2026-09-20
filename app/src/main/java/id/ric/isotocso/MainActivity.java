@@ -5,6 +5,9 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.content.ClipData;
 import android.provider.DocumentsContract;
+import android.content.ContentValues;
+import android.provider.MediaStore;
+import android.os.Environment;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -38,6 +41,7 @@ public class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private Uri inputUri, outputUri, outputDirUri;
+    private TextView queueText;
     private final List<Uri> inputQueue = new ArrayList<>();
     private final List<String> nameQueue = new ArrayList<>();
     private int queueIndex = 0, queueCsoLevel = 6;
@@ -65,7 +69,7 @@ public class MainActivity extends Activity {
         sub.setTextColor(Color.DKGRAY); root.addView(sub, margins(dp(0),dp(6),0,dp(28)));
 
         fileText = text("Belum ada ISO dipilih", 16, true); root.addView(fileText, margins(0,0,0,dp(12)));
-        chooseButton = button("Pilih file ISO"); chooseButton.setOnClickListener(v -> pickIso()); root.addView(chooseButton);
+        chooseButton = button("Pilih file ISO / tambah ke antrian"); chooseButton.setOnClickListener(v -> pickIso()); root.addView(chooseButton);\n        queueText = text("Antrian: kosong · pilih beberapa ISO sekaligus", 14, false); queueText.setTextColor(Color.DKGRAY); root.addView(queueText, margins(0,dp(8),0,0));
         Button cutsceneButton=button("Kelola cutscene PS2");
         cutsceneButton.setOnClickListener(v->startActivity(new Intent(this,CutsceneActivity.class)));
         root.addView(cutsceneButton,margins(0,dp(8),0,0));
@@ -139,7 +143,7 @@ public class MainActivity extends Activity {
             fileText.setText(inputQueue.size()==1?inputName:inputQueue.size()+" ISO dalam antrian");
             startButton.setEnabled(true);
             statusText.setText(inputQueue.size()==1?"ISO siap dikompres":"Antrian siap · "+inputQueue.size()+" file");
-            statsText.setText(inputQueue.size()==1?"File asli tetap aman dan tidak akan diubah.":"Diproses berurutan otomatis: 1 → "+inputQueue.size());
+            statsText.setText(inputQueue.size()==1?"File asli tetap aman dan tidak akan diubah.":"Diproses berurutan otomatis: 1 → "+inputQueue.size());\n            updateQueueText();
         } else if(req==PICK_OUTPUT_DIR && data.getData()!=null){
             outputDirUri=data.getData();
             try{ getContentResolver().takePersistableUriPermission(outputDirUri,
@@ -147,7 +151,7 @@ public class MainActivity extends Activity {
             queueIndex=0; queueRunning=true; cancelled.set(false); processNextQueueItem();
         }
     }
-    private void addIsoToQueue(Uri uri){
+    private void updateQueueText(){\n        if(queueText==null)return;\n        if(inputQueue.isEmpty()){queueText.setText("Antrian: kosong · pilih beberapa ISO sekaligus");return;}\n        StringBuilder b=new StringBuilder("ANTRIAN · ").append(inputQueue.size()).append(" file");\n        for(int i=0;i<inputQueue.size();i++) b.append("\\n").append(i+1).append(". ").append(nameQueue.get(i));\n        queueText.setText(b.toString());\n    }\n    private void addIsoToQueue(Uri uri){
         String n=nameOf(uri);
         if(n.toLowerCase(Locale.ROOT).endsWith(".iso")){ inputQueue.add(uri); nameQueue.add(n); }
     }
@@ -157,17 +161,16 @@ public class MainActivity extends Activity {
         if(queueIndex>=inputQueue.size()){
             queueRunning=false; setBusy(false); progress.setProgress(1000);
             statusText.setText("Semua antrian selesai");
-            statsText.setText(inputQueue.size()+" file berhasil diproses.");
+            statsText.setText(inputQueue.size()+" file berhasil diproses.");\n            queueText.setText("Antrian selesai · "+inputQueue.size()+"/"+inputQueue.size());
             return;
         }
         inputUri=inputQueue.get(queueIndex); inputName=nameQueue.get(queueIndex);
         String base=inputName.toLowerCase(Locale.ROOT).endsWith(".iso")?inputName.substring(0,inputName.length()-4):inputName;
         String ext=outputAsChd?".chd":".cso";
         try{
-            outputUri=DocumentsContract.createDocument(getContentResolver(),outputDirUri,
-                    "application/octet-stream",base+ext);
+            Uri treeDoc=DocumentsContract.buildDocumentUriUsingTree(outputDirUri, DocumentsContract.getTreeDocumentId(outputDirUri));\n            outputUri=DocumentsContract.createDocument(getContentResolver(),treeDoc,\n                    "application/octet-stream",base+ext);
             if(outputUri==null) throw new IOException("Gagal membuat output "+base+ext);
-            fileText.setText("Antrian "+(queueIndex+1)+"/"+inputQueue.size()+" · "+inputName);
+            fileText.setText("Antrian "+(queueIndex+1)+"/"+inputQueue.size()+" · "+inputName);\n            queueText.setText("Memproses "+(queueIndex+1)+"/"+inputQueue.size()+" · "+inputName);
             runCompression();
         }catch(Exception e){
             queueRunning=false; setBusy(false); statusText.setText("Gagal membuat output");
