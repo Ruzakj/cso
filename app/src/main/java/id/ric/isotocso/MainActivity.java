@@ -190,7 +190,10 @@ public class MainActivity extends Activity {
                         statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk\\nOutput sementara: "+size(written));
                     })); inputBytes=r.inputBytes(); outputBytes=r.outputBytes();
                 }
-                runOnUiThread(()->{ progress.setProgress(1000); long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;\n                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik");\n                    if(queueRunning){ queueIndex++; statusText.setText("Selesai · lanjut antrian berikutnya"); processNextQueueItem(); }\n                    else { setBusy(false); statusText.setText("Selesai & tervalidasi"); } });
+                runOnUiThread(()->{ progress.setProgress(1000); long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;
+                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik");
+                    if(queueRunning){ queueIndex++; statusText.setText("Selesai · lanjut antrian berikutnya"); processNextQueueItem(); }
+                    else { setBusy(false); statusText.setText("Selesai & tervalidasi"); } });
             } catch(Exception e) {
                 if(outputUri!=null) try{ getContentResolver().delete(outputUri,null,null); }catch(Exception ignored){}
                 runOnUiThread(()->{queueRunning=false;setBusy(false);progress.setProgress(0);statusText.setText(e instanceof CsoCompressor.CancelledException?"Dibatalkan":"Gagal di antrian "+(queueIndex+1));statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());});
