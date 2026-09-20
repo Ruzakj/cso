@@ -157,8 +157,7 @@ public class MainActivity extends Activity {
         if(queueText==null)return;
         if(inputQueue.isEmpty()){queueText.setText("Antrian: kosong · pilih beberapa ISO sekaligus");return;}
         StringBuilder b=new StringBuilder("ANTRIAN · ").append(inputQueue.size()).append(" file");
-        for(int i=0;i<inputQueue.size();i++) b.append("\
-").append(i+1).append(". ").append(nameQueue.get(i));
+        for(int i=0;i<inputQueue.size();i++) b.append(" | ").append(i+1).append(". ").append(nameQueue.get(i));
         queueText.setText(b.toString());
     }
     private void addIsoToQueue(Uri uri){
@@ -204,13 +203,11 @@ public class MainActivity extends Activity {
                     (done,total,written,started)->runOnUiThread(()->{
                         progress.setProgress((int)(done*1000/total)); double sec=Math.max(.001,(System.currentTimeMillis()-started)/1000d);
                         statusText.setText("Mengompres… "+(done*100/total)+"%");
-                        statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk\
-Output sementara: "+size(written));
+                        statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk · Output sementara: "+size(written));
                     })); inputBytes=r.inputBytes(); outputBytes=r.outputBytes();
                 }
                 runOnUiThread(()->{ progress.setProgress(1000); long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;
-                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\
-Hemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik");
+                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO · Hemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik");
                     if(queueRunning){ queueIndex++; statusText.setText("Selesai · lanjut antrian berikutnya"); processNextQueueItem(); }
                     else { setBusy(false); statusText.setText("Selesai & tervalidasi"); } });
             } catch(Exception e) {
