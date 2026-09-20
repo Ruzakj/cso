@@ -3,6 +3,8 @@ package id.ric.isotocso;
 import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
+import android.content.ClipData;
+import android.provider.DocumentsContract;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -25,15 +27,21 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends Activity {
-    private static final int PICK_ISO = 10, CREATE_CSO = 11;
+    private static final int PICK_ISO = 10, PICK_OUTPUT_DIR = 11;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AtomicBoolean cancelled = new AtomicBoolean();
-    private Uri inputUri, outputUri;
+    private Uri inputUri, outputUri, outputDirUri;
+    private final List<Uri> inputQueue = new ArrayList<>();
+    private final List<String> nameQueue = new ArrayList<>();
+    private int queueIndex = 0, queueCsoLevel = 6;
+    private boolean queueRunning = false;
     private String inputName = "game.iso";
     private TextView fileText, levelText, statusText, statsText;
     private Button chooseButton, startButton, cancelButton;
@@ -99,6 +107,7 @@ public class MainActivity extends Activity {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE)
                 .setType("*/*")
+                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 .putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
                         "application/octet-stream",
                         "application/x-iso9660-image",
@@ -108,31 +117,66 @@ public class MainActivity extends Activity {
         startActivityForResult(i, PICK_ISO);
     }
     private void createOutput() {
-        String base = inputName.toLowerCase(Locale.ROOT).endsWith(".iso") ? inputName.substring(0,inputName.length()-4) : inputName;
+        if(inputQueue.isEmpty() && inputUri!=null){ inputQueue.add(inputUri); nameQueue.add(inputName); }
+        if(inputQueue.isEmpty()) return;
         outputAsChd = formatsChdSelected();
-        String extension = outputAsChd ? ".chd" : ".cso";
-        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream")
-                .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, base + extension);
-        startActivityForResult(i, CREATE_CSO);
+        queueCsoLevel = levelBar.getProgress()+1;
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        startActivityForResult(i, PICK_OUTPUT_DIR);
     }
     @Override protected void onActivityResult(int req,int result,Intent data) {
-        super.onActivityResult(req,result,data); if(result!=RESULT_OK || data==null || data.getData()==null)return;
-        Uri uri=data.getData();
+        super.onActivityResult(req,result,data); if(result!=RESULT_OK || data==null)return;
         if(req==PICK_ISO){
-            String selectedName=nameOf(uri);
-            if(!selectedName.toLowerCase(Locale.ROOT).endsWith(".iso")){
-                statusText.setText("File harus berformat .iso");
-                statsText.setText("Pilih image game PSP dengan ekstensi ISO.");
-                return;
-            }
-            inputUri=uri; inputName=selectedName; fileText.setText(inputName);
-            startButton.setEnabled(true); statusText.setText("ISO siap dikompres");
+            inputQueue.clear(); nameQueue.clear();
+            ClipData clips=data.getClipData();
+            if(clips!=null){
+                for(int n=0;n<clips.getItemCount();n++) addIsoToQueue(clips.getItemAt(n).getUri());
+            } else if(data.getData()!=null) addIsoToQueue(data.getData());
+            if(inputQueue.isEmpty()){ statusText.setText("Tidak ada ISO valid dipilih"); return; }
+            inputUri=inputQueue.get(0); inputName=nameQueue.get(0);
+            fileText.setText(inputQueue.size()==1?inputName:inputQueue.size()+" ISO dalam antrian");
+            startButton.setEnabled(true);
+            statusText.setText(inputQueue.size()==1?"ISO siap dikompres":"Antrian siap · "+inputQueue.size()+" file");
+            statsText.setText(inputQueue.size()==1?"File asli tetap aman dan tidak akan diubah.":"Diproses berurutan otomatis: 1 → "+inputQueue.size());
+        } else if(req==PICK_OUTPUT_DIR && data.getData()!=null){
+            outputDirUri=data.getData();
+            try{ getContentResolver().takePersistableUriPermission(outputDirUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION); }catch(Exception ignored){}
+            queueIndex=0; queueRunning=true; cancelled.set(false); processNextQueueItem();
         }
-        else if(req==CREATE_CSO){ outputUri=uri; runCompression(); }
+    }
+    private void addIsoToQueue(Uri uri){
+        String n=nameOf(uri);
+        if(n.toLowerCase(Locale.ROOT).endsWith(".iso")){ inputQueue.add(uri); nameQueue.add(n); }
+    }
+    private void processNextQueueItem(){
+        if(!queueRunning) return;
+        if(cancelled.get()){ queueRunning=false; setBusy(false); statusText.setText("Antrian dibatalkan"); return; }
+        if(queueIndex>=inputQueue.size()){
+            queueRunning=false; setBusy(false); progress.setProgress(1000);
+            statusText.setText("Semua antrian selesai");
+            statsText.setText(inputQueue.size()+" file berhasil diproses.");
+            return;
+        }
+        inputUri=inputQueue.get(queueIndex); inputName=nameQueue.get(queueIndex);
+        String base=inputName.toLowerCase(Locale.ROOT).endsWith(".iso")?inputName.substring(0,inputName.length()-4):inputName;
+        String ext=outputAsChd?".chd":".cso";
+        try{
+            outputUri=DocumentsContract.createDocument(getContentResolver(),outputDirUri,
+                    "application/octet-stream",base+ext);
+            if(outputUri==null) throw new IOException("Gagal membuat output "+base+ext);
+            fileText.setText("Antrian "+(queueIndex+1)+"/"+inputQueue.size()+" · "+inputName);
+            runCompression();
+        }catch(Exception e){
+            queueRunning=false; setBusy(false); statusText.setText("Gagal membuat output");
+            statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());
+        }
     }
     private void runCompression() {
         setBusy(true); cancelled.set(false); progress.setProgress(0); long uiStart=System.currentTimeMillis();
-        final boolean makeChd=outputAsChd; final int csoLevel=levelBar.getProgress()+1;
+        final boolean makeChd=outputAsChd; final int csoLevel=queueRunning?queueCsoLevel:levelBar.getProgress()+1;
         worker.execute(() -> {
             try {
                 long inputBytes, outputBytes;
@@ -146,12 +190,10 @@ public class MainActivity extends Activity {
                         statsText.setText(size(done)+" / "+size(total)+"  ·  "+size((long)(done/sec))+"/dtk\\nOutput sementara: "+size(written));
                     })); inputBytes=r.inputBytes(); outputBytes=r.outputBytes();
                 }
-                runOnUiThread(()->{ setBusy(false); progress.setProgress(1000); statusText.setText("Selesai & tervalidasi");
-                    long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;
-                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik"); });
+                runOnUiThread(()->{ progress.setProgress(1000); long saved=inputBytes-outputBytes; double ratio=outputBytes*100d/inputBytes;\n                    statsText.setText("Hasil "+size(outputBytes)+" · "+new DecimalFormat("0.0").format(ratio)+"% dari ISO\\nHemat "+size(Math.max(0,saved))+" · "+((System.currentTimeMillis()-uiStart)/1000)+" detik");\n                    if(queueRunning){ queueIndex++; statusText.setText("Selesai · lanjut antrian berikutnya"); processNextQueueItem(); }\n                    else { setBusy(false); statusText.setText("Selesai & tervalidasi"); } });
             } catch(Exception e) {
                 if(outputUri!=null) try{ getContentResolver().delete(outputUri,null,null); }catch(Exception ignored){}
-                runOnUiThread(()->{setBusy(false);progress.setProgress(0);statusText.setText(e instanceof CsoCompressor.CancelledException?"Dibatalkan":"Gagal");statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());});
+                runOnUiThread(()->{queueRunning=false;setBusy(false);progress.setProgress(0);statusText.setText(e instanceof CsoCompressor.CancelledException?"Dibatalkan":"Gagal di antrian "+(queueIndex+1));statsText.setText(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());});
             }
         });
     }
